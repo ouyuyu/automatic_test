@@ -51,7 +51,7 @@ def qa(source,q,autoBreak=0):
         return None,None
     else:
         content = result_content[0]['content']
-        answer_path = json.loads(session_status)['answer_path']#包含节点路径，填槽信息等内容
+        answer_path = json.loads(session_status)['answer_path'][0]#包含节点路径，填槽信息等内容
         answer_dict = json.loads(content)# 包含答案、答案类型等信息
         return answer_dict,answer_path
 
@@ -72,7 +72,7 @@ class Source(object):
             answer_dict,answer_path = qa(self.source,question)
             #如果是开场白的情况下，要让返回的答案一定是开场白为止
             if question == self.start_q:
-                while answer_path["topic_name"] == self.start_q:
+                while answer_path["node_name"] != self.start_q:
                    answer_dict,answer_path = qa(self.source,question)
                    
         except KeyError:
@@ -118,7 +118,7 @@ class Source(object):
         
         else:  #其他 (主节点默认话术)
 #             print(4)
-            return f'{answer_path[0]["node_name"]}||'+answer
+            return f'{answer_path["node_name"]}||'+answer
     
     
     def callback_list_forscript(self,path:str,new_question:str):
