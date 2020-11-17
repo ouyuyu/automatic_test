@@ -8,7 +8,7 @@
 # import xlwings as xw
 import requests,json
 from urllib import parse
-import numpy,pandas
+import numpy,pandas 
 import re
 # import re
 
@@ -167,9 +167,9 @@ class Source(object):
         return self.callback_multi(question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_wzyhqydk'
-    a= Source(source,end_q='成功结束语')
+    source = 'phone_waihu_hfzqdxzgfxjshf'
+    a= Source(source,end_q='结束语不使用螺丝')
     
     while True:
-        print(a.callback_list("开场白>有需求>有的"))
+        print(a.callback_list("开场白>是的"))
         print('\n'+'--------Next---------')

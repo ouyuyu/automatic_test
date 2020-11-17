@@ -2,7 +2,6 @@
 需要解决的问题
 
 - 导致异常的原因，触发标准句可能是否定意图
-- 多轮当中显示进入哪个子节点
 
 """
 # import xlwings as xw
@@ -15,6 +14,13 @@ import re
 # source = 'phone_waihu_dwzqclhf'
 # qa = '你是不是机器人'
 def qa(source,q,autoBreak=0):
+    '''
+    简单的QA函数，输入问句，直接返回答案
+    如果是异常情况，则返回KeyError
+    正常情况下返回:
+    content词典
+    
+    '''
     if q == "收到":
         q = "是的"
     
@@ -45,8 +51,8 @@ def qa(source,q,autoBreak=0):
         return None,None
     else:
         content = result_content[0]['content']
-        answer_path = json.loads(session_status)['answer_path']
-        answer_dict = json.loads(content)
+        answer_path = json.loads(session_status)['answer_path']#包含节点路径，填槽信息等内容
+        answer_dict = json.loads(content)# 包含答案、答案类型等信息
         return answer_dict,answer_path
 
 
@@ -57,15 +63,29 @@ class Source(object):
         self.end_q = end_q
     
     def callback_multi(self,question):
+        '''
+        对qa的规则修饰:
+        1.默认不说话往下走，自动回复【好的】
+        2.如果问句是开场白，一定要让返回的答案是【开场白】才行
+        '''
         try:
             answer_dict,answer_path = qa(self.source,question)
+            #如果是开场白的情况下，要让返回的答案一定是开场白为止
+            if question == self.start_q:
+                while answer_path["topic_name"] == self.start_q:
+                   answer_dict,answer_path = qa(self.source,question)
+                   
         except KeyError:
             raise KeyError
         if answer_dict is None:
             return "这个问题无法解答"
         
+        #答案
         answer = answer_dict['answer']
+        #触发的标准句trigger
         topic_name = answer_dict["matched_topic_name"]
+        
+        
         if answer_dict["display_answer"] != "":
             #默认不说话往下走的情况
             if json.loads(answer_dict["display_answer"])["action"] == "mute_query": 
@@ -99,28 +119,6 @@ class Source(object):
         else:  #其他 (主节点默认话术)
 #             print(4)
             return f'{answer_path[0]["node_name"]}||'+answer
-    
-    def callback_list(self,questions:str):
-        
-        # setUp
-        qlist = questions.split('-')
-        try:
-            for item in qlist:
-                answer = self.callback_multi(item)
-            print(answer)
-            
-            # test
-            answer = self.callback_multi(input("q:"))
-        
-        #发生KeyError错误时
-        except KeyError:
-            qa(self.source,self.end_q) #tearDown
-            return "KeyError"
-        
-        #结果正常时候
-        else:
-            qa(self.source,self.end_q) #tearDown
-            return answer
     
     
     def callback_list_forscript(self,path:str,new_question:str):
@@ -167,8 +165,8 @@ class Source(object):
         return self.callback_multi(question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_sxdxqfwhhs'
-    a= Source(source,end_q='打错结束语')
+    source = 'phone_waihu_zxjtclhf'
+    a= Source(source,end_q='开场白')
     
 #     while True:
 #         print(a.callback_list("开场白-方便"))

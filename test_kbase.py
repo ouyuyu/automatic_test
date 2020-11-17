@@ -8,9 +8,8 @@
 # import xlwings as xw
 import requests,json
 from urllib import parse
-import numpy,pandas
-import re
-# import re
+import pandas
+
 
 # source = 'phone_waihu_dwzqclhf'
 # qa = '你是不是机器人'
@@ -18,7 +17,7 @@ def qa(source,q,autoBreak=0):
     if q == "收到":
         q = "是的"
     
-    url = f'http://vopoc.ths123.com/brokerageController/center/?question={parse.quote(q)}&source={source}&user_id=8lodfmmu9llq798rnazsaff5fesseq40'
+    url = f'http://vopoc.ths123.com//brokerageController/center/?question={parse.quote(q)}&source={source}&user_id=8lodfmmu9llq798rnazsaff5fesseq40'
     resp = requests.get(url)
     result = resp.content.decode('utf8')
 #     print(result)
@@ -60,8 +59,8 @@ class Source(object):
         return qa(self.source,question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_zzmfkd'
-    a= Source(source,end_q='送多少兆的宽带')
+    source = 'phone_waihu_zxjtclhf'
+    a= Source(source,end_q='傻逼')
     
 #     while True:
 #         print(a.callback_list("开场白-方便"))
@@ -69,7 +68,7 @@ if __name__ == '__main__':
     
     df = pandas.read_csv('123.csv',encoding='GBK')
     data = df.iterrows()
-    new_df = pandas.DataFrame(columns=["测试问句","匹配到的标准句","是否正确"])
+    new_df = pandas.DataFrame(columns=["测试问句","匹配到的标准句","标准句","是否正确"])
     for item in data:
         index = item[0]
         question = item[1][0]
@@ -87,5 +86,5 @@ if __name__ == '__main__':
             print(3,e)
             matched_topic = "NaN"
         
-        new_df.loc[index] = [question,matched_topic,False]       
+        new_df.loc[index] = [question,matched_topic,standar,matched_topic==standar]       
     new_df.to_csv('知识库测试结果.csv',encoding='utf8',index=False)
