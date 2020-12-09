@@ -9,10 +9,8 @@ import requests,json
 from urllib import parse
 import numpy,pandas
 import re
-# import re
 
-# source = 'phone_waihu_dwzqclhf'
-# qa = '你是不是机器人'
+
 def qa(source,q,autoBreak=0):
     '''
     简单的QA函数，输入问句，直接返回答案
@@ -27,7 +25,6 @@ def qa(source,q,autoBreak=0):
     url = f'http://vopoc.ths123.com/brokerageController/center/?question={parse.quote(q)}&source={source}&user_id=8lodfmmu9llq798rnazsaff5fesseq40'
     resp = requests.get(url)
     result = resp.content.decode('utf8')
-#     print(result)
     try:
         result_content = json.loads(result)['answer'][0]['txt']
         session_status = json.loads(result)['answer'][0]['session_status']
@@ -44,14 +41,20 @@ def qa(source,q,autoBreak=0):
         else:
             raise KeyError
     if result_content == []:
-#         answer = "这个问题无法解答"
-#         ismute = False
-#         topic_name = 'Error'
-#         ismulti = False
         return None,None
     else:
         content = result_content[0]['content']
-        answer_path = json.loads(session_status)['answer_path'][0]#包含节点路径，填槽信息等内容
+        
+        try:#待解决:模板测试有问题,phone_waihu_hccybclhf当中遇到默认不说话返回的answer_path为空列表
+            answer_path = json.loads(session_status)['answer_path'][0]#包含节点路径，填槽信息等内容
+        except:
+            '''
+                以下情况会触发警报
+                1.遇到接口节点，对话页无法获取信息一直打断失败
+                2.本身就无法回答的打断失败
+            '''
+            answer_path = {}
+            print(session_status)
         answer_dict = json.loads(content)# 包含答案、答案类型等信息
         return answer_dict,answer_path
 
@@ -72,7 +75,8 @@ class Source(object):
             answer_dict,answer_path = qa(self.source,question)
             #如果是开场白的情况下，要让返回的答案一定是开场白为止
             if question == self.start_q:
-                while answer_path["node_name"] != self.start_q:
+#                 while answer_path["node_name"] != self.start_q: #如果节点名称是1.1 开场白,那将进入死循环
+                while not "开场白" in answer_path["node_name"]:
                    answer_dict,answer_path = qa(self.source,question)
                    
         except KeyError:
@@ -86,10 +90,10 @@ class Source(object):
         topic_name = answer_dict["matched_topic_name"]
         
         
-        if answer_dict["display_answer"] != "":
+        if answer_dict["display_answer"] != "": #如果有交互动作
             #默认不说话往下走的情况
             if json.loads(answer_dict["display_answer"])["action"] == "mute_query": 
-                answer = answer+'【默认不说话】\n'+self.callback_multi('好的')
+                answer = answer+'*默认不说话*\n'+self.callback_multi('好的')
                 return answer
             
             #结束语的情况
@@ -99,25 +103,26 @@ class Source(object):
             #重播的情况
             elif json.loads(answer_dict["display_answer"])["action"] == "replay": 
                 return f'【{topic_name}】'+answer
-
+            #打断不填槽的情况
+            elif json.loads(answer_dict["display_answer"])["action"] == "interrupt_not_slot":
+                return f'【{topic_name}】'+answer
+            else:
+                print("未知交互动作："+answer_dict["display_answer"])
+                return f'{answer_path["node_name"]}||'+answer
         #打断话术
         elif answer_dict["dialog_state"] == "2":
-#             print(2)
             return '[打断失败话术]'+answer
         
         elif not "根节点" in topic_name: 
 
             #小多轮的情况
             if answer_dict['is_multi_topic']:
-#                 print(3.1)
                 return f'{answer}[{topic_name}]'
             #标准句的情况
             else:
-#                 print(3.2)
                 return f'【{topic_name}】{answer}'
         
         else:  #其他 (主节点默认话术)
-#             print(4)
             return f'{answer_path["node_name"]}||'+answer
     
     
@@ -147,11 +152,6 @@ class Source(object):
         
         #结果正常时候
         else:
-            #tearDown
-            try:
-                qa(self.source,self.end_q) 
-            except:
-                qa(self.source,self.end_q)
             
             if '[打断失败话术]' in answer:
                 return section,answer,'打断失败','-'
@@ -165,27 +165,21 @@ class Source(object):
         return self.callback_multi(question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_zxjtclhf'
-    a= Source(source,end_q='开场白')
-    
-#     while True:
-#         print(a.callback_list("开场白-方便"))
-#         print('\n'+'--------Next---------')
+    source = 'phone_waihu_hcrzrqclhf'
+    a= Source(source,end_q="开场白")
+
     
     df = pandas.read_csv('2345.csv',encoding='GBK')
     data = df.iterrows()
     new_df = pandas.DataFrame(columns=["测试节点","测试路径","测试场景","测试问句","回答","打断失败","匹配到的标准句"])
+    row_count = df.shape[0]
     for item in data:
         index = item[0]
         node = item[1][0]
         path = item[1][1]
         question = item[1][2]
-        try:
-            section,answer,isInter,topic = a.callback_list_forscript(path,question)
-        except Exception as e:
-            print(3,e)
-            section,answer,isInter,topic = "NaN","NaN","NaN","NaN"
-        
+        print("\r","{:.1%}".format((index+1)/row_count),end="")
+        section,answer,isInter,topic = a.callback_list_forscript(path,question)
         new_df.loc[index] = [node,path,section,question,answer,isInter,topic]
-            
+    print("\n测试完成")        
     new_df.to_csv('多轮测试结果.csv',encoding='utf8',index=False,chunksize=None)

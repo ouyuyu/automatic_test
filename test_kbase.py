@@ -57,28 +57,36 @@ class Source(object):
         return qa(self.source,question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_dskrseyyhs'
+    source = 'phone_waihu_ghjyhs'
     a= Source(source)
     
 #     while True:
 #         print(a.callback_list("开场白-方便"))
 #         print('\n'+'--------Next---------')
     
-    df = pandas.read_csv('123.csv',encoding='GBK')
+    try:
+        df = pandas.read_csv('123.csv',encoding='GBK')
+    except UnicodeDecodeError:
+        df = pandas.read_csv('123.csv',encoding='utf8')
     data = df.iterrows()
     new_df = pandas.DataFrame(columns=["测试问句","匹配到的标准句","标准句","是否正确"])
+    row_count = df.shape[0]
+    wrong_standar = set()
     for item in data:
         index = item[0]
         question = item[1][0]
         standar = item[1][1]
+        print("\r","{:.1%}".format((index+1)/row_count),end="")
         try:
             #询问问句
             answer_dict,answer_path = a(question)
             
             #方案一:遇到是小多轮的情况，就重复说"好的"，直到返回的是结束语
             matched_topic = answer_dict['matched_topic_name']
+            if matched_topic!=standar:
+                wrong_standar.add(standar)
             if answer_dict["is_multi_topic"]:
-                while not "再见" in answer_dict["answer"]:
+                while not "hangup" in answer_dict["display_answer"]:
                     answer_dict,answer_path = a("好的")
             
             
@@ -99,4 +107,10 @@ if __name__ == '__main__':
             matched_topic = "NaN"
         
         new_df.loc[index] = [question,matched_topic,standar,1 if matched_topic==standar else 0]  
+    
+    print(f"知识库数量{row_count},正确数{new_df.是否正确.sum()},正确率{new_df.是否正确.sum()/row_count:.2%}")
+    if len(wrong_standar) > 0:
+        print("\n错误标准句如下:")
+        for w in wrong_standar:
+            print(w)
     new_df.to_csv('知识库测试结果.csv',encoding='utf8',index=False)
