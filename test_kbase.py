@@ -1,16 +1,15 @@
-"""
-需要解决的问题:
-把结果直接显示出来
+# 填写关键信息
+SOURCE = 'phone_waihu_xxjdsqyyhf'    #被测试模板的source
+FILENAME = '123.csv'                     #测试集文件，需要是csv文件
 
-"""
+
+
 # import xlwings as xw
 import requests,json
 from urllib import parse
 import pandas
 
 
-# source = 'phone_waihu_dwzqclhf'
-# qa = '你是不是机器人'
 def qa(source,q,autoBreak=0):
     if q == "收到":
         q = "是的"
@@ -57,7 +56,7 @@ class Source(object):
         return qa(self.source,question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_ghjyhs'
+    source = SOURCE
     a= Source(source)
     
 #     while True:
@@ -65,9 +64,9 @@ if __name__ == '__main__':
 #         print('\n'+'--------Next---------')
     
     try:
-        df = pandas.read_csv('123.csv',encoding='GBK')
+        df = pandas.read_csv(FILENAME,encoding='GBK')
     except UnicodeDecodeError:
-        df = pandas.read_csv('123.csv',encoding='utf8')
+        df = pandas.read_csv(FILENAME,encoding='utf8')
     data = df.iterrows()
     new_df = pandas.DataFrame(columns=["测试问句","匹配到的标准句","标准句","是否正确"])
     row_count = df.shape[0]
@@ -102,13 +101,15 @@ if __name__ == '__main__':
         except KeyError as e:
 #             print(question,"￥无法回答￥","")
             matched_topic = "NaN"
+            wrong_standar.add(standar)
         except Exception as e:
             print(3,e)
             matched_topic = "NaN"
+            wrong_standar.add(standar)
         
         new_df.loc[index] = [question,matched_topic,standar,1 if matched_topic==standar else 0]  
     
-    print(f"知识库数量{row_count},正确数{new_df.是否正确.sum()},正确率{new_df.是否正确.sum()/row_count:.2%}")
+    print(f"知识库数量\t正确数\t正确率\n{row_count}\t{new_df.是否正确.sum()}\t{new_df.是否正确.sum()/row_count:.2%}")
     if len(wrong_standar) > 0:
         print("\n错误标准句如下:")
         for w in wrong_standar:

@@ -1,27 +1,31 @@
-"""
-需要解决的问题
+# 填写关键信息
+SOURCE = 'phone_waihu_yhkjjzcgz'    #被测试模板的source
+PATH = '开场白>是的>好的>好的'                      #测试路径，问题与问题之间用>隔开
 
-- 导致异常的原因，触发标准句可能是否定意图
-- 多轮当中显示进入哪个子节点
+START_Q = "开场白"                        #模板的模板场景，一般情况下默认值是开场白，适当情况下可以改成"kaichangbai"或者"Kai Chang Bai"
 
-"""
 # import xlwings as xw
 import requests,json
 from urllib import parse
-import numpy,pandas 
-import re
-# import re
+import numpy,pandas
+import time
 
-# source = 'phone_waihu_dwzqclhf'
-# qa = '你是不是机器人'
+
+
 def qa(source,q,autoBreak=0):
+    '''
+    简单的QA函数，输入问句，直接返回答案
+    如果是异常情况，则返回KeyError
+    正常情况下返回:
+    content词典
+    
+    '''
     if q == "收到":
         q = "是的"
     
     url = f'http://vopoc.ths123.com/brokerageController/center/?question={parse.quote(q)}&source={source}&user_id=8lodfmmu9llq798rnazsaff5fesseq40'
     resp = requests.get(url)
     result = resp.content.decode('utf8')
-#     print(result)
     try:
         result_content = json.loads(result)['answer'][0]['txt']
         session_status = json.loads(result)['answer'][0]['session_status']
@@ -37,16 +41,23 @@ def qa(source,q,autoBreak=0):
             exit()
         else:
             raise KeyError
+    
     if result_content == []:
-#         answer = "这个问题无法解答"
-#         ismute = False
-#         topic_name = 'Error'
-#         ismulti = False
         return None,None
     else:
         content = result_content[0]['content']
-        answer_path = json.loads(session_status)['answer_path']
-        answer_dict = json.loads(content)
+        
+        try:#待解决:模板测试有问题,phone_waihu_hccybclhf当中遇到默认不说话返回的answer_path为空列表
+            answer_path = json.loads(session_status)['answer_path'][0]#包含节点路径，填槽信息等内容
+        except:
+            '''
+                以下情况会触发警报
+                1.遇到接口节点，对话页无法获取信息一直打断失败
+                2.本身就无法回答的打断失败
+            '''
+            answer_path = {}
+            print(session_status)
+        answer_dict = json.loads(content)# 包含答案、答案类型等信息
         return answer_dict,answer_path
 
 
@@ -57,73 +68,90 @@ class Source(object):
         self.end_q = end_q
     
     def callback_multi(self,question):
+        '''
+        对qa的规则修饰:
+        1.如果问句是开场白，一定要让返回的答案是【开场白】才行
+        '''
+        #输出模板默认数据
+        callmulti_dict = {
+            "nodename":"-",
+            "topic_name":"-",
+            "answer":"-",
+            "isInterrupt":"-",
+            "remark":"-",
+            "intent":"-",
+            "filled_slot":"-"
+            }
+
         try:
             answer_dict,answer_path = qa(self.source,question)
+            #如果是开场白的情况下，要让返回的答案一定是开场白为止
+            if question == self.start_q:
+                while not "开场白" in answer_path["node_name"]:
+                   answer_dict,answer_path = qa(self.source,question)
+            #填入答案
+            callmulti_dict["answer"] = answer_dict['answer']
+            #触发的标准句trigger,不一定要填入
+            topic_name = answer_dict["matched_topic_name"]
         except KeyError:
-            raise KeyError
+            print(KeyError,question)
+            return callmulti_dict
         if answer_dict is None:
-            return "这个问题无法解答"
+            callmulti_dict["answer"] = "这个问题无法解答"
+            return callmulti_dict
         
+        #答案
         answer = answer_dict['answer']
+        #触发的标准句trigger
         topic_name = answer_dict["matched_topic_name"]
-        if answer_dict["display_answer"] != "":
+        
+        
+        if answer_dict["display_answer"] != "": #如果有交互动作
             #默认不说话往下走的情况
             if json.loads(answer_dict["display_answer"])["action"] == "mute_query": 
-                answer = answer+'【默认不说话】\n'+self.callback_multi('好的')
-                return answer
+                callmulti_dict["nodename"] = answer_path["node_name"]
             
             #结束语的情况
             elif json.loads(answer_dict["display_answer"])["action"] == "hangup": 
-                return f'【结束语:{topic_name}】'+answer
+                #如果是多轮结束语
+                if answer_dict["is_multi_topic"]:
+                    callmulti_dict["nodename"] = answer_path["node_name"]
+                else:
+                    callmulti_dict["topic_name"] = topic_name
             
             #重播的情况
             elif json.loads(answer_dict["display_answer"])["action"] == "replay": 
-                return f'【{topic_name}】'+answer
-
-        #打断话术
+                callmulti_dict["topic_name"] = topic_name
+            #打断不填槽的情况
+            elif json.loads(answer_dict["display_answer"])["action"] == "interrupt_not_slot":
+                callmulti_dict["nodename"] = answer_path["node_name"]
+            
+            else:
+                print("未知交互动作："+answer_dict["display_answer"])
+                callmulti_dict["nodename"] = answer_path["node_name"]
+                callmulti_dict["topic_name"] = topic_name
+                callmulti_dict["remark"] = answer_path
+        
+        #如果是打断话术
         elif answer_dict["dialog_state"] == "2":
-#             print(2)
-            return '[打断失败话术]'+answer
+            callmulti_dict["isInterrupt"] = "打断失败"
         
         elif not "根节点" in topic_name: 
 
             #小多轮的情况
             if answer_dict['is_multi_topic']:
-#                 print(3.1)
-                return f'{answer}[{topic_name}]'
+                callmulti_dict["topic_name"] = topic_name
+                callmulti_dict["nodename"] = answer_path["node_name"]
             #标准句的情况
             else:
-#                 print(3.2)
-                return f'【{topic_name}】{answer}'
+                callmulti_dict["topic_name"] = topic_name
         
         else:  #其他 (主节点默认话术)
-#             print(4)
-            return f'\033[1;36m{answer_path[0]["node_name"]}\033[0m\t||'+answer
-    
-    def callback_list(self,questions:str):
-        
-        # setUp
-        qlist = questions.split('>')
-        try:
-            for item in qlist:
-                answer = self.callback_multi(item)
-            print(answer)
-            
-            # test
-            answer = self.callback_multi(input("q:"))
-        
-        #发生KeyError错误时
-        except KeyError:
-            qa(self.source,self.end_q) #tearDown
-            return "KeyError"
-        
-        #结果正常时候
-        else:
-            qa(self.source,self.end_q) #tearDown
-            return answer
+            callmulti_dict["nodename"] = answer_path["node_name"]
+        return callmulti_dict
     
     
-    def callback_list_forscript(self,path:str,new_question:str):
+    def callback_list(self,path:str):
         
         # setUp
         try:
@@ -132,44 +160,26 @@ class Source(object):
             qlist = []
         try:
             for item in qlist:
-                section = self.callback_multi(item)
-            
-            # test
-            answer = self.callback_multi(new_question)
-        
-        #发生KeyError错误时
-        except KeyError:
-            qa(self.source,self.end_q) #tearDown
-            return section,"KeyError",'-','-'
+                section = self.callback_multi(item)["answer"]
         
         except Exception as e:
             print(2,e)
-            qa(self.source,self.end_q) #tearDown
-            return section,"OtherError",'-','-'
-        
         #结果正常时候
-        else:
-            #tearDown
-            try:
-                qa(self.source,self.end_q) 
-            except:
-                qa(self.source,self.end_q)
-            
-            if '[打断失败话术]' in answer:
-                return section,answer,'打断失败','-'
-            elif all(['【' in answer,not '小多轮' in answer,not '结束语' in answer]):
-                topic = re.findall(r'【(.*)】',answer)[0]
-                return section,answer,'-',topic
-            else:
-                return section,answer,'-','-'
+        finally:
+            return section
     
     def __call__(self,question):
         return self.callback_multi(question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_hfzqdxzgfxjshf'
-    a= Source(source,end_q='结束语不使用螺丝')
+    source = SOURCE
+    a= Source(source,start_q=START_Q)
     
     while True:
-        print(a.callback_list("开场白>是的"))
-        print('\n'+'--------Next---------')
+        print("测试场景:",a.callback_list(PATH),"\n")
+        query = input("你说:")
+        print("\n机器人说:",a.callback_list(query))
+        input()
+        print('\n--------Next---------\n')
+
+

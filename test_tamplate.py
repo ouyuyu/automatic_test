@@ -1,14 +1,15 @@
-"""
-需要解决的问题
+# 填写关键信息
+SOURCE = 'phone_waihu_ctzqdxsppoc'    #被测试模板的source
+FILENAME = '2345.csv'                 #测试用例文件名字，不建议修改
 
-- 导致异常的原因，触发标准句可能是否定意图
+START_Q = "开场白"                     #模板的模板场景，一般情况下默认值是开场白，适当情况下可以改成"kaichangbai"或者"Kai Chang Bai"
 
-"""
 # import xlwings as xw
 import requests,json
 from urllib import parse
 import numpy,pandas
 import re
+from tqdm import tqdm
 
 
 def qa(source,q,autoBreak=0):
@@ -40,6 +41,7 @@ def qa(source,q,autoBreak=0):
             exit()
         else:
             raise KeyError
+    
     if result_content == []:
         return None,None
     else:
@@ -68,21 +70,35 @@ class Source(object):
     def callback_multi(self,question):
         '''
         对qa的规则修饰:
-        1.默认不说话往下走，自动回复【好的】
-        2.如果问句是开场白，一定要让返回的答案是【开场白】才行
+        1.如果问句是开场白，一定要让返回的答案是【开场白】才行
         '''
+        #输出模板默认数据
+        callmulti_dict = {
+            "nodename":"-",
+            "topic_name":"-",
+            "answer":"-",
+            "isInterrupt":"-",
+            "remark":"-",
+            "intent":"-",
+            "filled_slot":"-"
+            }
+
         try:
             answer_dict,answer_path = qa(self.source,question)
             #如果是开场白的情况下，要让返回的答案一定是开场白为止
             if question == self.start_q:
-#                 while answer_path["node_name"] != self.start_q: #如果节点名称是1.1 开场白,那将进入死循环
                 while not "开场白" in answer_path["node_name"]:
                    answer_dict,answer_path = qa(self.source,question)
-                   
+            #填入答案
+            callmulti_dict["answer"] = answer_dict['answer']
+            #触发的标准句trigger,不一定要填入
+            topic_name = answer_dict["matched_topic_name"]
         except KeyError:
-            raise KeyError
+            print(KeyError,question)
+            return callmulti_dict
         if answer_dict is None:
-            return "这个问题无法解答"
+            callmulti_dict["answer"] = "这个问题无法解答"
+            return callmulti_dict
         
         #答案
         answer = answer_dict['answer']
@@ -93,37 +109,46 @@ class Source(object):
         if answer_dict["display_answer"] != "": #如果有交互动作
             #默认不说话往下走的情况
             if json.loads(answer_dict["display_answer"])["action"] == "mute_query": 
-                answer = answer+'*默认不说话*\n'+self.callback_multi('好的')
-                return answer
+                callmulti_dict["nodename"] = answer_path["node_name"]
             
             #结束语的情况
             elif json.loads(answer_dict["display_answer"])["action"] == "hangup": 
-                return f'【结束语:{topic_name}】'+answer
+                #如果是多轮结束语
+                if answer_dict["is_multi_topic"]:
+                    callmulti_dict["nodename"] = answer_path["node_name"]
+                else:
+                    callmulti_dict["topic_name"] = topic_name
             
             #重播的情况
             elif json.loads(answer_dict["display_answer"])["action"] == "replay": 
-                return f'【{topic_name}】'+answer
+                callmulti_dict["topic_name"] = topic_name
             #打断不填槽的情况
             elif json.loads(answer_dict["display_answer"])["action"] == "interrupt_not_slot":
-                return f'【{topic_name}】'+answer
+                callmulti_dict["nodename"] = answer_path["node_name"]
+            
             else:
                 print("未知交互动作："+answer_dict["display_answer"])
-                return f'{answer_path["node_name"]}||'+answer
-        #打断话术
+                callmulti_dict["nodename"] = answer_path["node_name"]
+                callmulti_dict["topic_name"] = topic_name
+                callmulti_dict["remark"] = answer_path
+        
+        #如果是打断话术
         elif answer_dict["dialog_state"] == "2":
-            return '[打断失败话术]'+answer
+            callmulti_dict["isInterrupt"] = "打断失败"
         
         elif not "根节点" in topic_name: 
 
             #小多轮的情况
             if answer_dict['is_multi_topic']:
-                return f'{answer}[{topic_name}]'
+                callmulti_dict["topic_name"] = topic_name
+                callmulti_dict["nodename"] = answer_path["node_name"]
             #标准句的情况
             else:
-                return f'【{topic_name}】{answer}'
+                callmulti_dict["topic_name"] = topic_name
         
         else:  #其他 (主节点默认话术)
-            return f'{answer_path["node_name"]}||'+answer
+            callmulti_dict["nodename"] = answer_path["node_name"]
+        return callmulti_dict
     
     
     def callback_list_forscript(self,path:str,new_question:str):
@@ -135,43 +160,29 @@ class Source(object):
             qlist = []
         try:
             for item in qlist:
-                section = self.callback_multi(item)
-            
+                section = self.callback_multi(item)["answer"]
             # test
-            answer = self.callback_multi(new_question)
-        
-        #发生KeyError错误时
-        except KeyError:
-            qa(self.source,self.end_q) #tearDown
-            return section,"KeyError",'-','-'
+            test_result = self.callback_multi(new_question)
         
         except Exception as e:
             print(2,e)
-            qa(self.source,self.end_q) #tearDown
-            return section,"OtherError",'-','-'
-        
         #结果正常时候
-        else:
-            
-            if '[打断失败话术]' in answer:
-                return section,answer,'打断失败','-'
-            elif all(['【' in answer,not '小多轮' in answer,not '结束语' in answer]):
-                topic = re.findall(r'【(.*)】',answer)[0]
-                return section,answer,'-',topic
-            else:
-                return section,answer,'-','-'
+        finally:
+            return section,test_result
     
     def __call__(self,question):
         return self.callback_multi(question)
 
 if __name__ == '__main__':
-    source = 'phone_waihu_hcrzrqclhf'
-    a= Source(source,end_q="开场白")
-
+    source = SOURCE
+    a= Source(source,start_q=START_Q)
     
-    df = pandas.read_csv('2345.csv',encoding='GBK')
+    try:
+        df = pandas.read_csv(FILENAME,encoding='utf8')
+    except UnicodeDecodeError:
+        df = pandas.read_csv(FILENAME,encoding='GBK')
     data = df.iterrows()
-    new_df = pandas.DataFrame(columns=["测试节点","测试路径","测试场景","测试问句","回答","打断失败","匹配到的标准句"])
+    new_df = pandas.DataFrame(columns=["测试节点","测试路径","测试场景","测试问句","多轮节点","匹配到的标准句","回答","打断失败"])
     row_count = df.shape[0]
     for item in data:
         index = item[0]
@@ -179,7 +190,14 @@ if __name__ == '__main__':
         path = item[1][1]
         question = item[1][2]
         print("\r","{:.1%}".format((index+1)/row_count),end="")
-        section,answer,isInter,topic = a.callback_list_forscript(path,question)
-        new_df.loc[index] = [node,path,section,question,answer,isInter,topic]
+        try:
+            section,test_result = a.callback_list_forscript(path,question)
+            nodename,topic,answer,isInter = test_result["nodename"],test_result["topic_name"],test_result["answer"],test_result["isInterrupt"]
+        except Exception as e:
+            print(3,e)
+            section,nodename,topic,answer,isInter = "NaN","NaN","NaN","NaN","NaN"
+        new_df.loc[index] = [node,path,section,question,nodename,topic,answer,isInter]
     print("\n测试完成")        
     new_df.to_csv('多轮测试结果.csv',encoding='utf8',index=False,chunksize=None)
+
+
