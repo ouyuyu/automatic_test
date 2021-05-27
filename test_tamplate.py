@@ -1,6 +1,7 @@
 # 填写关键信息
-SOURCE = 'phone_waihu_pkzsbcsymb'    #被测试模板的source
+SOURCE = 'phone_waihu_xnzqpoc'    #被测试模板的source
 FILENAME = '2345.csv'                 #测试用例文件名字，不建议修改
+OUTPUTNAME = '多轮测试结果.csv'      #测试报告文件名字，必须以csv结尾
 
 # 配置信息 - 一般情况
 START_Q = "开场白"
@@ -9,7 +10,7 @@ START_Q = "开场白"
 一般情况下默认值是开场白，适当情况下可以改成"kaichangbai"或者"Kai Chang Bai"。
 """
 
-FIRST_NODE = "开场白"
+FIRST_NODE = "1.1开场白"
 """
 第一个节点的节点名称，用作路径生效，如果出现输入路径但是测试场景不匹配的情况下进行修改。
 一般情况下默认值是开场白。
@@ -233,7 +234,7 @@ def main1(source,start_q,test_filename):
             section, nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN", "NaN"
         new_df.loc[index] = [node, path, section, question, nodename, topic, answer, filled_slot, intent, isInter]
     print("\n测试完成")
-    new_df.to_csv('多轮测试结果.csv', encoding='utf8', index=False, chunksize=None)
+    new_df.to_csv(OUTPUTNAME, encoding='utf8', index=False, chunksize=None)
 
 def main2(source,start_q,test_filename):
     a = Source(source, start_q)

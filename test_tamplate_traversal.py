@@ -1,6 +1,6 @@
 # 填写关键信息
-SOURCE = 'phone_waihu_yhkjjzcgz'    #被测试模板的source
-PATH = '开场白>是的>好的>好的'                      #测试路径，问题与问题之间用>隔开
+SOURCE = 'phone_waihu_hdhseyd'    #被测试模板的source
+PATH = '开场白'                      #测试路径，问题与问题之间用>隔开
 
 START_Q = "开场白"                        #模板的模板场景，一般情况下默认值是开场白，适当情况下可以改成"kaichangbai"或者"Kai Chang Bai"
 
@@ -179,7 +179,7 @@ if __name__ == '__main__':
         print("测试场景:",a.callback_list(PATH),"\n")
         query = input("你说:")
         print("\n机器人说:",a.callback_list(query))
-        input()
+#         input()
         print('\n--------Next---------\n')
 
 
