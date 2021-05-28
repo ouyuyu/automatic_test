@@ -1,7 +1,12 @@
 # 填写关键信息
-SOURCE = 'phone_waihu_xnzqpoc'    #被测试模板的source
+SOURCE = 'phone_waihu_hdhseyd'    #被测试模板的source
+TESTMODE = 2                      #1.批量测试跑脚本 2.轮询测试不停问   
+# 配置信息:批量测试
 FILENAME = '2345.csv'                 #测试用例文件名字，不建议修改
 OUTPUTNAME = '多轮测试结果.csv'      #测试报告文件名字，必须以csv结尾
+
+# 配置信息:轮询测试
+PATH = '开场白'
 
 # 配置信息 - 一般情况
 START_Q = "开场白"
@@ -25,6 +30,7 @@ try:
     from tqdm import tqdm
 except ImportError:
     tqdm = lambda x:x
+from colorize import printWarn,printInfo,printError,printHighlight
 
 
 def qa(source,q,autoBreak=0):
@@ -86,9 +92,9 @@ class Source(object):
         self.start_q = start_q
         self.end_q = end_q
     
-    def callback_multi(self,question):
+    def callback_multi(self,question) -> dict:
         '''
-        对qa的规则修饰:
+        本质上还是一次提问,但是对qa的规则进行修饰,提取关键字段:
         1.如果问句是开场白，一定要让返回的答案是【开场白】才行
         '''
         #输出模板默认数据
@@ -102,12 +108,14 @@ class Source(object):
             "filled_slot":"-"
             }
 
+
         try:
-            #如果是开场白的情况下，要让返回的答案一定是开场白为止
+            # 如果是开场白的情况下，要让返回的答案一定是开场白为止
             if question == self.start_q:
                 answer_dict,session_status = qa(self.source,question)
                 while session_status["answer_path"][0]["node_name"] != FIRST_NODE:
                    answer_dict,session_status = qa(self.source,question)
+            # 否则正常提问,返回answer_dict,session_status
             else:
                 answer_dict,session_status = qa(self.source,question)
             #填入答案
@@ -118,16 +126,15 @@ class Source(object):
 #             traceback.print_exc()
             print(KeyError,question)
             return callmulti_dict
+        # 如果返回的答案是None,那就是无法解答，非打断失败
         if answer_dict is None:
             callmulti_dict["answer"] = "这个问题无法解答"
             return callmulti_dict
-        
-        #答案
-        answer = answer_dict['answer']
+
         #触发的标准句trigger
         topic_name = answer_dict["matched_topic_name"]
-        
-        if answer_dict["display_answer"] != "": #如果有交互动作
+        # 如果有交互动作
+        if answer_dict["display_answer"] != "":
             #默认不说话往下走的情况
             if json.loads(answer_dict["display_answer"])["action"] == "mute_query": 
                 callmulti_dict["nodename"] = session_status["answer_path"][0]["node_name"]
@@ -152,11 +159,10 @@ class Source(object):
                 callmulti_dict["nodename"] = session_status["answer_path"][0]["node_name"]
                 callmulti_dict["topic_name"] = topic_name
                 callmulti_dict["remark"] = session_status["answer_path"][0]
-        
-        #如果是打断话术
+        #如果是打断失败话术
         elif answer_dict["dialog_state"] == "2":
             callmulti_dict["isInterrupt"] = "打断失败"
-        
+        #如果是小多轮或者是单轮
         elif not "根节点" in topic_name: 
 
             #小多轮的情况
@@ -166,8 +172,8 @@ class Source(object):
             #标准句的情况
             else:
                 callmulti_dict["topic_name"] = topic_name
-        
-        else:  #其他 (主节点默认话术)
+        # 其他情况 (主节点默认话术)
+        else:
             callmulti_dict["nodename"] = session_status["answer_path"][0]["node_name"]
         
         #获取填槽信息
@@ -183,10 +189,8 @@ class Source(object):
         if answer_dict['intent'] != {}:
             callmulti_dict['intent'] = answer_dict['intent']['value']
         return callmulti_dict
-    
-    
-    def callback_list_forscript(self,path:str,new_question:str):
-        
+
+    def callback_list(self, path: str):
         # setUp
         try:
             qlist = path.split('>')
@@ -195,11 +199,18 @@ class Source(object):
         try:
             for item in qlist:
                 section = self.callback_multi(item)["answer"]
+        except Exception as e:
+            print(2, e)
+            # traceback.print_exc()
+        finally:
+            return section
+    def callback_list_forscript(self,path:str,new_question:str):
+        section = self.callback_list(path)
+        try:
             # test
             test_result = self.callback_multi(new_question)
-        
         except Exception as e:
-            print(2,e)
+            print(3,e)
             # traceback.print_exc()
         #结果正常时候
         finally:
@@ -230,21 +241,36 @@ def main1(source,start_q,test_filename):
                                                                     test_result["answer"], test_result["isInterrupt"], \
                                                                     test_result["filled_slot"], test_result["intent"]
         except Exception as e:
-            print(3, question, e)
+            print(4, question, e)
             section, nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN", "NaN"
         new_df.loc[index] = [node, path, section, question, nodename, topic, answer, filled_slot, intent, isInter]
     print("\n测试完成")
     new_df.to_csv(OUTPUTNAME, encoding='utf8', index=False, chunksize=None)
 
-def main2(source,start_q,test_filename):
-    a = Source(source, start_q)
-    try:
-        df = pandas.read_csv(test_filename, encoding='utf8')
-    except UnicodeDecodeError:
-        df = pandas.read_csv(test_filename, encoding='GBK')
-    data = df.iterrows()
-    new_df = pandas.DataFrame(columns=["测试节点", "测试路径", "测试场景", "测试问句", "多轮节点", "匹配到的标准句", "回答", "填槽信息", "意向", "打断失败"])
-    row_count = df.shape[0]
+def main2(source):
+    a = Source(source, START_Q)
+    while True:
+        print("测试场景:", a.callback_list(PATH), "\n")
+        query = input("你说:")
+        answer_dict = a.callback_multi(query)
+        text = "\n机器人说:"+ answer_dict['answer']
+        if answer_dict['isInterrupt'] == "-":
+            print(text)
+        else:
+            printError(text)
+        if answer_dict['nodename'] != "-":
+            printInfo("多轮节点:"+answer_dict['nodename'])
+        if answer_dict['filled_slot'] != "-":
+            printInfo("填槽信息:" + answer_dict['filled_slot'])
+        if answer_dict['topic_name'] != "-":
+            printInfo("触达知识库:"+answer_dict['topic_name'])
+        if answer_dict['intent'] != "-":
+            printHighlight("输出意向:" + answer_dict['intent'])
+        input()
+        print('\n--------Next---------\n')
     
 if __name__ == '__main__':
-    main1(SOURCE,START_Q,FILENAME)
+    if TESTMODE == 1:
+        main1(SOURCE,START_Q,FILENAME)
+    elif TESTMODE == 2:
+        main2(SOURCE)
