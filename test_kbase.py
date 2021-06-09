@@ -1,5 +1,5 @@
 # 填写关键信息
-SOURCE = 'phone_waihu_cxqbpxzx'    #被测试模板的source
+SOURCE = 'phone_waihu_gdqhqhyx'    #被测试模板的source
 FILENAME = '123.csv'                     #测试集文件，需要是csv文件
 
 

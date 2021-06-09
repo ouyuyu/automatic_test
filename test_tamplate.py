@@ -1,29 +1,22 @@
-# 填写关键信息
-SOURCE = 'phone_waihu_hdhseyd'    #被测试模板的source
-TESTMODE = 2                      #1.批量测试跑脚本 2.轮询测试不停问   
+# 必填项
+SOURCE = 'phone_waihu_gdlcygbl1h'    #被测试模板的source
+TESTMODE = 3                      #1.批量测试跑脚本 2.轮询测试不停问
+FIRST_NODE = "开场白"           #第一个节点的节点名称,必须要和模板填写一致
+START_Q = "开场白"
+
 # 配置信息:批量测试
 FILENAME = '2345.csv'                 #测试用例文件名字，不建议修改
 OUTPUTNAME = '多轮测试结果.csv'      #测试报告文件名字，必须以csv结尾
 
 # 配置信息:轮询测试
-PATH = '开场白'
+PATH = '开场白'                     # 测试路径
+AUTOPASS = 1                       #自动进入下一轮：1表示会自动进行，0表示不会
 
-# 配置信息 - 一般情况
-START_Q = "开场白"
-"""
-模板的模板场景，即开场白节点触发标准句，用作路径生效，如果出现输入路径但是测试场景不匹配的情况下进行修改。
-一般情况下默认值是开场白，适当情况下可以改成"kaichangbai"或者"Kai Chang Bai"。
-"""
-
-FIRST_NODE = "1.1开场白"
-"""
-第一个节点的节点名称，用作路径生效，如果出现输入路径但是测试场景不匹配的情况下进行修改。
-一般情况下默认值是开场白。
-"""
 
 import requests,json
 from urllib import parse
 import pandas
+from numpy import nan
 import re
 import traceback
 try:
@@ -105,7 +98,8 @@ class Source(object):
             "isInterrupt":"-",
             "remark":"-",
             "intent":"-",
-            "filled_slot":"-"
+            "filled_slot":"-",
+            "isHangup":False
             }
 
 
@@ -146,6 +140,7 @@ class Source(object):
                     callmulti_dict["nodename"] = session_status["answer_path"][0]["node_name"]
                 else:
                     callmulti_dict["topic_name"] = topic_name
+                callmulti_dict["isHangup"] = True
             
             #重播的情况
             elif json.loads(answer_dict["display_answer"])["action"] == "replay": 
@@ -187,7 +182,9 @@ class Source(object):
             callmulti_dict["filled_slot"] = f"{word_type}"
         #获取意向信息
         if answer_dict['intent'] != {}:
-            callmulti_dict['intent'] = answer_dict['intent']['value']
+            intent = answer_dict['intent']['value']
+            if intent != "":
+                callmulti_dict['intent'] = answer_dict['intent']['value']
         return callmulti_dict
 
     def callback_list(self, path: str):
@@ -215,7 +212,22 @@ class Source(object):
         #结果正常时候
         finally:
             return section,test_result
-    
+    def display_multiinfo(self,query):
+        answer_dict = self.callback_multi(query)
+        text = "\n机器人说:" + answer_dict['answer']
+        if answer_dict['isInterrupt'] == "-":
+            print(text)
+        else:
+            printError(text)
+        if answer_dict['nodename'] != "-":
+            printInfo("多轮节点:" + answer_dict['nodename'])
+        if answer_dict['filled_slot'] != "-":
+            printInfo("填槽信息:" + answer_dict['filled_slot'])
+        if answer_dict['topic_name'] != "-":
+            printInfo("触达知识库:" + answer_dict['topic_name'])
+        if answer_dict['intent'] != "-":
+            printHighlight("输出意向:" + answer_dict['intent'])
+        return answer_dict
     def __call__(self,question):
         return self.callback_multi(question)
 
@@ -227,7 +239,7 @@ def main1(source,start_q,test_filename):
     except UnicodeDecodeError:
         df = pandas.read_csv(test_filename, encoding='GBK')
     data = df.iterrows()
-    new_df = pandas.DataFrame(columns=["测试节点", "测试路径", "测试场景", "测试问句", "多轮节点", "匹配到的标准句", "回答", "填槽信息", "意向", "打断失败"])
+    new_df = pandas.DataFrame(columns=["测试节点", "测试路径", "测试场景", "测试问句", "多轮节点", "匹配到的标准句", "回答", "填槽信息", "意向", "打断失败","是否正确（错标0，对标1，用例有问题标2）","问题类型（词库问题、槽位顺序、新知识、等等，按实际写）","优化方案","备注"])
     row_count = df.shape[0]
     for item in tqdm(data):
         index = item[0]
@@ -243,7 +255,7 @@ def main1(source,start_q,test_filename):
         except Exception as e:
             print(4, question, e)
             section, nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN", "NaN"
-        new_df.loc[index] = [node, path, section, question, nodename, topic, answer, filled_slot, intent, isInter]
+        new_df.loc[index] = [node, path, section, question, nodename, topic, answer, filled_slot, intent, isInter, nan, nan, nan, nan]
     print("\n测试完成")
     new_df.to_csv(OUTPUTNAME, encoding='utf8', index=False, chunksize=None)
 
@@ -252,25 +264,26 @@ def main2(source):
     while True:
         print("测试场景:", a.callback_list(PATH), "\n")
         query = input("你说:")
-        answer_dict = a.callback_multi(query)
-        text = "\n机器人说:"+ answer_dict['answer']
-        if answer_dict['isInterrupt'] == "-":
-            print(text)
-        else:
-            printError(text)
-        if answer_dict['nodename'] != "-":
-            printInfo("多轮节点:"+answer_dict['nodename'])
-        if answer_dict['filled_slot'] != "-":
-            printInfo("填槽信息:" + answer_dict['filled_slot'])
-        if answer_dict['topic_name'] != "-":
-            printInfo("触达知识库:"+answer_dict['topic_name'])
-        if answer_dict['intent'] != "-":
-            printHighlight("输出意向:" + answer_dict['intent'])
-        input()
+        a.display_multiinfo(query)
+        if not AUTOPASS:
+            input()
         print('\n--------Next---------\n')
-    
+def main3(source):
+    a = Source(source, START_Q)
+    while True:
+        section = a.callback_multi(START_Q)
+        printInfo("开场白")
+        print("机器人说:"+section["answer"])
+        while not section["isHangup"]:
+            query = input("\n你说:")
+            section = a.display_multiinfo(query)
+        printWarn("结束语挂机")
+        print("="*5,"输入回车进入下一轮","="*5)
+        input()
 if __name__ == '__main__':
     if TESTMODE == 1:
         main1(SOURCE,START_Q,FILENAME)
     elif TESTMODE == 2:
         main2(SOURCE)
+    elif TESTMODE == 3:
+        main3(SOURCE)
