@@ -1,6 +1,6 @@
 # 必填项
-SOURCE = 'phone_waihu_gdlcygbl1h'    #被测试模板的source
-TESTMODE = 3                      #1.批量测试跑脚本 2.轮询测试不停问
+SOURCE = 'phone_waihu_pkzsbcsymb'    #被测试模板的source
+TESTMODE = 4                    #1.批量测试跑脚本 2.轮询测试不停问
 FIRST_NODE = "开场白"           #第一个节点的节点名称,必须要和模板填写一致
 START_Q = "开场白"
 
@@ -9,9 +9,12 @@ FILENAME = '2345.csv'                 #测试用例文件名字，不建议修�
 OUTPUTNAME = '多轮测试结果.csv'      #测试报告文件名字，必须以csv结尾
 
 # 配置信息:轮询测试
-PATH = '开场白'                     # 测试路径
+PATH = '开场白>好的>好的'                     # 测试路径
 AUTOPASS = 1                       #自动进入下一轮：1表示会自动进行，0表示不会
 
+# 配置信息:流程测试
+FILENAME_2 = '1234.csv'
+OUTPUTNAME_2 = '多轮测试结果2.csv'
 
 import requests,json
 from urllib import parse
@@ -280,6 +283,31 @@ def main3(source):
         printWarn("结束语挂机")
         print("="*5,"输入回车进入下一轮","="*5)
         input()
+def main4(source):
+    a = Source(source, START_Q)
+    try:
+        df = pandas.read_csv(FILENAME_2, encoding='utf8')
+    except UnicodeDecodeError:
+        df = pandas.read_csv(FILENAME_2, encoding='GBK')
+    data = df.iterrows()
+    new_df = pandas.DataFrame(columns=["场景序号", "测试问句", "回答", "多轮节点", "匹配到的标准句", "填槽信息", "意向", "打断失败"])
+    row_count = df.shape[0]
+    for item in tqdm(data):
+        index = item[0]
+        group = item[1][0]
+        question = item[1][1]
+        print("\r", "{:.1%}...正在测试第{}组".format((index + 1) / row_count,group), end="")
+        try:
+            test_result = a.callback_multi(question)
+            nodename, topic, answer, isInter, filled_slot, intent = test_result["nodename"], test_result["topic_name"], \
+                                                                    test_result["answer"], test_result["isInterrupt"], \
+                                                                    test_result["filled_slot"], test_result["intent"]
+        except Exception as e:
+            print(4, question, e)
+            nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN"
+        new_df.loc[index] = [group, question, answer, nodename, topic,  filled_slot, intent, isInter]
+    print("\n测试完成")
+    new_df.to_csv(OUTPUTNAME_2, encoding='utf8', index=False, chunksize=None,)
 if __name__ == '__main__':
     if TESTMODE == 1:
         main1(SOURCE,START_Q,FILENAME)
@@ -287,3 +315,5 @@ if __name__ == '__main__':
         main2(SOURCE)
     elif TESTMODE == 3:
         main3(SOURCE)
+    elif TESTMODE == 4:
+        main4(SOURCE)
