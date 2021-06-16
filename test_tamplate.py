@@ -1,6 +1,6 @@
 # 必填项
-SOURCE = 'phone_waihu_pkzsbcsymb'    #被测试模板的source
-TESTMODE = 4                    #1.批量测试跑脚本 2.轮询测试不停问
+SOURCE = 'phone_waihu_zxkhdd'    #被测试模板的source
+TESTMODE = 2                    #1.批量测试跑脚本 2.轮询测试不停问
 FIRST_NODE = "开场白"           #第一个节点的节点名称,必须要和模板填写一致
 START_Q = "开场白"
 
@@ -9,7 +9,7 @@ FILENAME = '2345.csv'                 #测试用例文件名字，不建议修�
 OUTPUTNAME = '多轮测试结果.csv'      #测试报告文件名字，必须以csv结尾
 
 # 配置信息:轮询测试
-PATH = '开场白>好的>好的'                     # 测试路径
+PATH = '开场白'                     # 测试路径
 AUTOPASS = 1                       #自动进入下一轮：1表示会自动进行，0表示不会
 
 # 配置信息:流程测试
