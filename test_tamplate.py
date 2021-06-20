@@ -1,6 +1,6 @@
 # 必填项
-SOURCE = 'phone_waihu_zxkhdd'    #被测试模板的source
-TESTMODE = 2                    #1.批量测试跑脚本 2.轮询测试不停问
+SOURCE = 'phone_waihu_byyyrxahzsf'    #被测试模板的source
+TESTMODE = 3                    #1.批量测试跑脚本 2.轮询测试不停问
 FIRST_NODE = "开场白"           #第一个节点的节点名称,必须要和模板填写一致
 START_Q = "开场白"
 
@@ -66,7 +66,10 @@ def qa(source,q,autoBreak=0):
         session_status = json.loads(session_status)#包含节点路径，填槽信息等内容
         answer_dict = json.loads(content)# 包含答案、答案类型等信息
         #在answer_dict中插入意向信息
-        answer_dict['intent'] = json.loads(result)['answer'][0]["protocol"][0]["intent"] if len(json.loads(result)['answer'][0]["protocol"]) != 0 else {}
+        try:
+            answer_dict['intent'] = json.loads(result)['answer'][0]["protocol"][0]["intent"] if len(json.loads(result)['answer'][0]["protocol"]) != 0 else {}
+        except KeyError:
+            answer_dict['intent'] = {}
         return answer_dict,session_status
 #         try:#待解决:模板测试有问题,phone_waihu_hccybclhf当中遇到默认不说话返回的answer_path为空列表
 #             answer_path = json.loads(session_status)['answer_path'][0]#包含节点路径，填槽信息等内容
@@ -120,8 +123,8 @@ class Source(object):
             #触发的标准句trigger,不一定要填入
             topic_name = answer_dict["matched_topic_name"]
         except KeyError:
-#             traceback.print_exc()
-            print(KeyError,question)
+            traceback.print_exc()
+            # print(1,KeyError,question)
             return callmulti_dict
         # 如果返回的答案是None,那就是无法解答，非打断失败
         if answer_dict is None:
