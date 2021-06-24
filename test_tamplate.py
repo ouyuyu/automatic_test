@@ -1,15 +1,15 @@
 # 必填项
-SOURCE = 'phone_waihu_zxkhdd'    #被测试模板的source
-TESTMODE = 2                    #1.批量测试跑脚本 2.轮询测试不停问
-FIRST_NODE = "开场白"           #第一个节点的节点名称,必须要和模板填写一致
+SOURCE = 'phone_waihu_byyyrxahzsf'    #被测试模板的source
+TESTMODE = 1                        #1.批量测试单问题用例 2.对话页模式单节点测试 3.对话页模式 4.批量测试多轮用例
+FIRST_NODE = "C复查开场白"           #第一个节点的节点名称,必须要和模板填写一致。但是如果开场白是获取信息的节点，则填写跳转到的节点名称
 START_Q = "开场白"
 
 # 配置信息:批量测试
 FILENAME = '2345.csv'                 #测试用例文件名字，不建议修改
-OUTPUTNAME = '多轮测试结果.csv'      #测试报告文件名字，必须以csv结尾
+OUTPUTNAME = '多轮测试结果2.csv'      #测试报告文件名字，必须以csv结尾
 
 # 配置信息:轮询测试
-PATH = '开场白'                     # 测试路径
+PATH = '开场白>不舒服>头痛>有呕吐>好的'                     # 测试路径
 AUTOPASS = 1                       #自动进入下一轮：1表示会自动进行，0表示不会
 
 # 配置信息:流程测试
@@ -66,7 +66,14 @@ def qa(source,q,autoBreak=0):
         session_status = json.loads(session_status)#包含节点路径，填槽信息等内容
         answer_dict = json.loads(content)# 包含答案、答案类型等信息
         #在answer_dict中插入意向信息
-        answer_dict['intent'] = json.loads(result)['answer'][0]["protocol"][0]["intent"] if len(json.loads(result)['answer'][0]["protocol"]) != 0 else {}
+        protocol = json.loads(result)['answer'][0]["protocol"]
+        if len(protocol) != 0:
+            intentlist = [p["intent"]['value'] for p in protocol if "intent" in p and 'value' in p['intent']]
+            intentlist = [i for i in intentlist if i != ""]
+            intent = {"value":",".join(intentlist)}
+        else:
+            intent = {}
+        answer_dict['intent'] = intent
         return answer_dict,session_status
 #         try:#待解决:模板测试有问题,phone_waihu_hccybclhf当中遇到默认不说话返回的answer_path为空列表
 #             answer_path = json.loads(session_status)['answer_path'][0]#包含节点路径，填槽信息等内容
@@ -175,6 +182,7 @@ class Source(object):
             callmulti_dict["nodename"] = session_status["answer_path"][0]["node_name"]
         
         #获取填槽信息
+        # TODO:词槽信息获取不对
         if len(session_status["filled_slot"])>0:
             session_status["filled_slot"].sort(key=lambda x:x["pass_round"])
             filled_slot = session_status["filled_slot"][0]
@@ -201,7 +209,7 @@ class Source(object):
                 section = self.callback_multi(item)["answer"]
         except Exception as e:
             print(2, e)
-            # traceback.print_exc()
+            traceback.print_exc()
         finally:
             return section
     def callback_list_forscript(self,path:str,new_question:str):
@@ -260,7 +268,9 @@ def main1(source,start_q,test_filename):
             section, nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN", "NaN"
         new_df.loc[index] = [node, path, section, question, nodename, topic, answer, filled_slot, intent, isInter, nan, nan, nan, nan]
     print("\n测试完成")
+    new_df = new_df.sort_values("测试节点")
     new_df.to_csv(OUTPUTNAME, encoding='utf8', index=False, chunksize=None)
+
 
 def main2(source):
     a = Source(source, START_Q)
