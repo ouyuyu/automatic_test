@@ -1,7 +1,7 @@
 # 必填项
-SOURCE = 'phone_waihu_byyyrxahzsf'    #被测试模板的source
-TESTMODE = 1                        #1.批量测试单问题用例 2.对话页模式单节点测试 3.对话页模式 4.批量测试多轮用例
-FIRST_NODE = "C复查开场白"           #第一个节点的节点名称,必须要和模板填写一致。但是如果开场白是获取信息的节点，则填写跳转到的节点名称
+SOURCE = 'phone_waihu_gzdxspclcsy'    #被测试模板的source
+TESTMODE = 4                        #1.批量测试单问题用例 2.对话页模式单节点测试 3.对话页模式 4.批量测试多轮用例
+FIRST_NODE = "1开场白"           #第一个节点的节点名称,必须要和模板填写一致。但是如果开场白是获取信息的节点，则填写跳转到的节点名称
 START_Q = "开场白"
 
 # 配置信息:批量测试
@@ -9,7 +9,7 @@ FILENAME = '2345.csv'                 #测试用例文件名字，不建议修�
 OUTPUTNAME = '多轮测试结果2.csv'      #测试报告文件名字，必须以csv结尾
 
 # 配置信息:轮询测试
-PATH = '开场白>不舒服>头痛>有呕吐>好的'                     # 测试路径
+PATH = '开场白>是的'                     # 测试路径
 AUTOPASS = 1                       #自动进入下一轮：1表示会自动进行，0表示不会
 
 # 配置信息:流程测试
@@ -300,22 +300,32 @@ def main4(source):
     except UnicodeDecodeError:
         df = pandas.read_csv(FILENAME_2, encoding='GBK')
     data = df.iterrows()
-    new_df = pandas.DataFrame(columns=["场景序号", "测试问句", "回答", "多轮节点", "匹配到的标准句", "填槽信息", "意向", "打断失败"])
+    new_df = pandas.DataFrame(columns=["场景序号", "测试问句", "回答", "多轮节点", "匹配到的标准句", "填槽信息", "意向", "打断失败","意向路径"])
     row_count = df.shape[0]
+    intentpath = []
     for item in tqdm(data):
         index = item[0]
         group = item[1][0]
         question = item[1][1]
-        print("\r", "{:.1%}...正在测试第{}组".format((index + 1) / row_count,group), end="")
+        print("\r", "{:.1%}...正在测试第 {} 组".format((index + 1) / row_count,group), end="")
         try:
             test_result = a.callback_multi(question)
             nodename, topic, answer, isInter, filled_slot, intent = test_result["nodename"], test_result["topic_name"], \
                                                                     test_result["answer"], test_result["isInterrupt"], \
                                                                     test_result["filled_slot"], test_result["intent"]
+            if intent != "-":
+                intentpath.append(intent)
+            filled_slot = filled_slot.split(".")[-1]
         except Exception as e:
             print(4, question, e)
-            nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN"
-        new_df.loc[index] = [group, question, answer, nodename, topic,  filled_slot, intent, isInter]
+            nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN","NaN"
+        # 意向路径
+        if index == row_count-1 or df.loc[index][0] != df.loc[index+1][0]:
+            intentpath_str = "-".join(intentpath)
+            intentpath = []
+        else:
+            intentpath_str = "-"
+        new_df.loc[index] = [group, question, answer, nodename, topic,  filled_slot, intent, isInter,intentpath_str]
     print("\n测试完成")
     new_df.to_csv(OUTPUTNAME_2, encoding='utf8', index=False, chunksize=None,)
 if __name__ == '__main__':
