@@ -1,20 +1,24 @@
 # 必填项
-SOURCE = 'phone_waihu_gzdxspclcsy'    #被测试模板的source
-TESTMODE = 4                        #1.批量测试单问题用例 2.对话页模式单节点测试 3.对话页模式 4.批量测试多轮用例
+SOURCE = 'phone_waihu_wzlt5gdwtxkh'    #被测试模板的source
 FIRST_NODE = "1开场白"           #第一个节点的节点名称,必须要和模板填写一致。但是如果开场白是获取信息的节点，则填写跳转到的节点名称
-START_Q = "开场白"
+START_Q = "开场白"                  # 模板场景，可在模板列表编辑即可
+TESTMODE = 5                       #1.批量测试单问题用例 2.对话页模式单节点测试 3.对话页模式 4.批量测试多轮用例 5.随机测试模式
+
 
 # 配置信息:批量测试
 FILENAME = '2345.csv'                 #测试用例文件名字，不建议修改
 OUTPUTNAME = '多轮测试结果2.csv'      #测试报告文件名字，必须以csv结尾
 
-# 配置信息:轮询测试
-PATH = '开场白>是的'                     # 测试路径
+# 配置信息:单节点测试
+PATH = '开场白>你好>好的'                     # 测试路径
 AUTOPASS = 1                       #自动进入下一轮：1表示会自动进行，0表示不会
 
 # 配置信息:流程测试
 FILENAME_2 = '1234.csv'
-OUTPUTNAME_2 = '多轮测试结果2.csv'
+OUTPUTNAME_2 = '多轮测试结果3.csv'
+
+# 模式5随机测试测试轮数
+TEST_TIMES = 15
 
 import requests,json
 from urllib import parse
@@ -22,6 +26,7 @@ import pandas
 from numpy import nan
 import re
 import traceback
+from random import sample
 try:
     from tqdm import tqdm
 except ImportError:
@@ -195,7 +200,11 @@ class Source(object):
         if answer_dict['intent'] != {}:
             intent = answer_dict['intent']['value']
             if intent != "":
-                callmulti_dict['intent'] = answer_dict['intent']['value']
+                if "," in intent:
+                    intent = intent.split(",")
+                    intent.reverse()
+                    intent = "-".join(intent)
+                callmulti_dict['intent'] = intent
         return callmulti_dict
 
     def callback_list(self, path: str):
@@ -328,6 +337,104 @@ def main4(source):
         new_df.loc[index] = [group, question, answer, nodename, topic,  filled_slot, intent, isInter,intentpath_str]
     print("\n测试完成")
     new_df.to_csv(OUTPUTNAME_2, encoding='utf8', index=False, chunksize=None,)
+def main5(source):
+    a = Source(source, START_Q)
+
+    # 获取节点-话题映射表
+    try:
+        df_map = pandas.read_csv("mapping.csv", encoding='utf8')
+    except UnicodeDecodeError:
+        df_map = pandas.read_csv("mapping.csv", encoding='GBK')
+    map_datastr = df_map.iloc[:,:2].to_json(force_ascii=False,orient="values")
+    map_list = json.loads(map_datastr)
+    map_dict = {i[0]:i[1] for i in map_list}
+#     print(map_dict)
+    # 获取测试用例表
+    try:
+        df_case = pandas.read_csv("topiccase.csv", encoding='utf8')
+    except UnicodeDecodeError:
+        df_case = pandas.read_csv("topiccase.csv", encoding='GBK')
+    case_dict = dict()
+    for i in df_case.iterrows():
+        if i[1][0] in case_dict:
+            case_dict[i[1][0]].append(i[1][1])
+        else:
+            case_dict.update({i[1][0]:[i[1][1]]})
+#     print(case_dict)
+    new_df = pandas.DataFrame(columns=["场景序号", "测试问句", "回答", "多轮节点", "匹配到的标准句", "填槽信息", "意向", "打断失败","意向路径"])
+    index = 0
+    for i in range(TEST_TIMES):
+        intentpath = []
+        print(f"正在测试第{i+1}轮...")
+        test_result = a.callback_multi(START_Q)
+        new_df.loc[index] = [i+1,
+                             START_Q,
+                             test_result["answer"],
+                             test_result["nodename"],
+                             test_result["topic_name"],
+                             test_result["filled_slot"],
+                             test_result["intent"],
+                             test_result["isInterrupt"],
+                             ""]
+        if test_result["intent"] != "-":
+            intentpath.append(test_result["intent"])
+        index = index + 1
+        current_nodename = test_result["nodename"]
+        # 开始随机测试
+        while test_result["isHangup"]==False:
+            # 如果上一轮是多轮结果,取新topic
+            if test_result["nodename"] != "-":
+                assert test_result["nodename"] in map_dict,f"错误:检测到节点{test_result['nodename']}不在mapping文件中"
+                test_topic = map_dict[test_result["nodename"]] #TODO:如果取不到topic怎么办
+            # 如果上一轮是单轮,用旧topic
+            else:
+                assert current_nodename != "-",f"错误:请检查以下几项——\n1.确保{SOURCE}是演示环境的source\n2.请检查{FIRST_NODE}是否为模板的第一个有话术的节点名称\n3.请检查{START_Q}是不是模板场景(在模板列表点击\"编辑\"查看)"
+                test_topic = map_dict[current_nodename]
+            # 随机取测试用例
+            test_case = sample(case_dict[test_topic],1)[0]
+            try:
+                test_result = a.callback_multi(test_case)
+                if test_result["intent"] != "-":
+                    intentpath.append(test_result["intent"])
+                # 意向路径
+                if test_result["isHangup"]:
+                    try:  # 打分意向
+                        sum = 0
+                        for num in intentpath:
+                            sum = sum + int(num)
+                        intentpath_str = str(sum)
+                    except ValueError:  #直达or报表意向
+                        intentpath_str = "-".join(intentpath)
+                else:
+                    intentpath_str = ""
+                
+                new_df.loc[index] = [i+1,
+                                     test_case,
+                                     test_result["answer"],
+                                     test_result["nodename"],
+                                     test_result["topic_name"],
+                                     test_result["filled_slot"],
+                                     test_result["intent"],
+                                     test_result["isInterrupt"],
+                                     intentpath_str]
+                index = index + 1
+                if test_result["nodename"] != "-":
+                    current_nodename = test_result["nodename"]
+            except Exception as e:
+                traceback.print_exc()
+                nodename, topic, answer, isInter, filled_slot, intent = "NaN", "NaN", "NaN", "NaN", "NaN", "NaN","NaN"
+                new_df.loc[index] = [i+1,
+                                     test_case,
+                                     answer,
+                                     nodename,
+                                     topic,
+                                     filled_slot,
+                                     intent,
+                                     isInter,
+                                     "-".join(intentpath)]
+                index = index + 1
+                continue
+    new_df.to_csv("随机测试结果.csv", encoding='utf8', index=False)
 if __name__ == '__main__':
     if TESTMODE == 1:
         main1(SOURCE,START_Q,FILENAME)
@@ -337,3 +444,5 @@ if __name__ == '__main__':
         main3(SOURCE)
     elif TESTMODE == 4:
         main4(SOURCE)
+    elif TESTMODE ==5:
+        main5(SOURCE)
